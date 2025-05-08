@@ -19,6 +19,7 @@ public class CameraController : MonoBehaviour
     void Start()
     {
         cam = Camera.main;
+        ResetCameraPosition(); // 啟動時重設鏡頭位置與縮放
     }
 
     void Update()
@@ -85,5 +86,11 @@ public class CameraController : MonoBehaviour
         float clampedY = Mathf.Clamp(transform.position.y, minY, maxY);
 
         transform.position = new Vector3(clampedX, clampedY, transform.position.z);
+    }
+
+    public void ResetCameraPosition()
+    {
+        transform.position = new Vector3(0f, 0f, -10f);
+        cam.orthographicSize = 5.5f; // 重設縮放大小，可依預設需求微調
     }
 }

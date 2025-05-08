@@ -6,27 +6,33 @@ using UnityEngine;
 public class RoadManager : MonoBehaviour
 {
     [Header("道路預製物件與樣式")]
-    public GameObject roadTilePrefab;
+    public GameObject roadTilePrefab; // 道路格子預製物件，用於生成道路
     // 將自 Resources/Sprites/Road 中載入（共 12 張）
-    private Sprite[] roadSprites = new Sprite[12];
-    public Color previewColor = new Color(1, 1, 1, 0.4f);
-    public Color deletePreviewColor = new Color(1f, 0.3f, 0.3f, 0.4f);
-    public Color deleteFinalColor = new Color(1f, 0.3f, 0.3f, 1f);
+    private Sprite[] roadSprites = new Sprite[12]; // 儲存道路各種樣式的圖片資源
+    public Color previewColor = new Color(1, 1, 1, 0.4f); // 預覽道路顏色（半透明白）
+    public Color deletePreviewColor = new Color(1f, 0.3f, 0.3f, 0.4f); // 預覽刪除時顏色（半透明紅）
+    public Color deleteFinalColor = new Color(1f, 0.3f, 0.3f, 1f); // 確認刪除時顏色（不透明紅）
 
-    private Dictionary<Vector2Int, RoadTile> builtRoads = new();
-    private Dictionary<Vector2Int, RoadTile> previewTiles = new();
-    private HashSet<Vector2Int> markedForDelete = new();
-    private HashSet<Vector2Int> pendingEraseTiles = new();
+    private Dictionary<Vector2Int, RoadTile> builtRoads = new(); // 已建造的道路格子，key為格子座標
+    private Dictionary<Vector2Int, RoadTile> previewTiles = new(); // 預覽中（尚未確認建造）的道路格子
+    private HashSet<Vector2Int> markedForDelete = new(); // 標記為刪除的已建造道路格子
+    private HashSet<Vector2Int> pendingEraseTiles = new(); // 預覽中標記為刪除的格子
 
-    private Vector2Int? dragStart = null;
-    private Vector2Int? lastHoverPos = null;
-    private bool isPlacing = false;
-    private bool isDeleteMode = false;
+    private Vector2Int? dragStart = null; // 滑鼠拖曳起點格子座標（null表示未拖曳）
+    private Vector2Int? lastHoverPos = null; // 滑鼠目前懸停的格子座標（用於避免重複處理）
+    private bool isPlacing = false; // 是否處於建造模式
+    private bool isDeleteMode = false; // 是否處於刪除模式（根據拖曳起點判斷）
 
-    private Camera cam;
-    private MapGridManager grid;
+    private bool isConfirming = false; // 是否正在處理確認動作（避免重複觸發）
+    private float modeToggleCooldown = 0f; // 切換模式的冷卻時間，避免連點切換過快
+
+    private Camera cam; // 主相機
+    private MapGridManager grid; // 地圖格子管理器，用於座標轉換與判斷建造區域
 
 
+    /// <summary>
+    /// 載入所有道路圖片資源，並依名稱對應到陣列索引
+    /// </summary>
     void LoadAllRoadSprites()
     {
         var nameToIndex = new Dictionary<string, int>
@@ -62,6 +68,9 @@ public class RoadManager : MonoBehaviour
         Debug.Log($"[RoadManager] 已載入 {countLoaded} 張道路圖（總資源檔案：{loaded.Length}）");
     }
 
+    /// <summary>
+    /// 初始化，取得相機與地圖管理元件，並載入圖片資源
+    /// </summary>
     void Start()
     {
         cam = Camera.main;
@@ -69,13 +78,20 @@ public class RoadManager : MonoBehaviour
         LoadAllRoadSprites();
     }
 
+    /// <summary>
+    /// 每幀更新，處理模式切換與建造輸入
+    /// </summary>
     void Update()
     {
-        if (Input.GetMouseButtonDown(1)) ToggleBuildMode();
-        if (!isPlacing) return;
+        modeToggleCooldown -= Time.deltaTime;
+
+        if (!isPlacing) return; // 非建造模式不處理建造輸入
         HandleBuildInput();
     }
 
+    /// <summary>
+    /// 切換建造模式，並重置相關狀態與UI互動設定
+    /// </summary>
     void ToggleBuildMode()
     {
         isPlacing = !isPlacing;
@@ -89,8 +105,13 @@ public class RoadManager : MonoBehaviour
         UIMode.IsMouseEdgeScrollAllowed = isPlacing;
     }
 
+    /// <summary>
+    /// 處理建造相關輸入，包括拖曳建造與刪除、確認建造
+    /// </summary>
     void HandleBuildInput()
     {
+        if (isConfirming) return; // 正在確認中不處理輸入
+
         if (Input.GetMouseButtonDown(0))
         {
             dragStart = GetGridPosUnderMouse();
@@ -115,18 +136,33 @@ public class RoadManager : MonoBehaviour
             ProcessPendingErase();
         }
 
-        if (Input.GetKeyDown(KeyCode.Space)) ConfirmPreview();
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            isConfirming = true;
+            ConfirmPreview();
+            isConfirming = false;
+        }
     }
 
+    /// <summary>
+    /// 判斷該格是否處於刪除模式（已有預覽或建造道路）
+    /// </summary>
+    /// <param name="pos">格子座標</param>
+    /// <returns>是否刪除模式</returns>
     bool DetermineDeleteMode(Vector2Int pos)
     {
         return previewTiles.ContainsKey(pos) || builtRoads.ContainsKey(pos);
     }
 
+    /// <summary>
+    /// 根據目前模式，繪製預覽道路或標記刪除
+    /// </summary>
+    /// <param name="pos">格子座標</param>
     void DrawPreviewPoint(Vector2Int pos)
     {
         if (isDeleteMode)
         {
+            // 刪除模式：將預覽道路標記為刪除，或標記已建造道路刪除
             if (previewTiles.ContainsKey(pos))
             {
                 previewTiles[pos].SetColor(deletePreviewColor);
@@ -143,12 +179,13 @@ public class RoadManager : MonoBehaviour
         }
         else
         {
+            // 建造模式：若該格尚未有道路且可建造，生成預覽道路
             if (previewTiles.ContainsKey(pos) || builtRoads.ContainsKey(pos)) return;
             if (!grid.IsRegionBuildable(grid.GetRegionName(pos.x, pos.y))) return;
 
             Vector3 worldPos = grid.GridToWorld(pos);
             GameObject go = Instantiate(roadTilePrefab, worldPos, Quaternion.identity, transform);
-            RoadTile rt = go.GetComponent<RoadTile>();
+            RoadTile rt = go.GetComponent<RoadTile>();  
             rt.gridPos = pos;
             rt.SetColor(previewColor);
             previewTiles[pos] = rt;
@@ -157,6 +194,9 @@ public class RoadManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 處理拖曳過程中標記刪除的預覽與已建造道路，並更新周圍樣式
+    /// </summary>
     void ProcessPendingErase()
     {
         foreach (Vector2Int pos in pendingEraseTiles)
@@ -182,28 +222,62 @@ public class RoadManager : MonoBehaviour
         markedForDelete.Clear();
     }
 
+    /// <summary>
+    /// 確認建造，將預覽道路轉為正式建造，並優先處理刪除標記
+    /// </summary>
     void ConfirmPreview()
     {
+        // 🧹 先刪除拖曳期間標記為「要刪除」的預覽道路
+        foreach (Vector2Int pos in pendingEraseTiles)
+        {
+            if (previewTiles.ContainsKey(pos))
+            {
+                Destroy(previewTiles[pos].gameObject);
+                previewTiles.Remove(pos);
+                UpdateSurrounding(pos);
+            }
+        }
+
+        // 🧹 刪除尚未釋放滑鼠時標記為刪除的已建成道路
+        foreach (Vector2Int pos in markedForDelete)
+        {
+            if (builtRoads.ContainsKey(pos))
+            {
+                Destroy(builtRoads[pos].gameObject);
+                builtRoads.Remove(pos);
+                UpdateSurrounding(pos);
+            }
+        }
+
+        // ✅ 將剩下的預覽轉為正式建造（排除已標記要刪除的格子）
         foreach (var kvp in previewTiles)
         {
             Vector2Int pos = kvp.Key;
-            RoadTile tile = kvp.Value;
+            if (markedForDelete.Contains(pos)) continue; // 優先刪除，不建造
 
+            RoadTile tile = kvp.Value;
             tile.SetColor(Color.white);
             builtRoads[pos] = tile;
         }
 
+        // 🔄 更新周圍圖示樣式
         foreach (var kvp in previewTiles)
         {
-            UpdateSurrounding(kvp.Key); // ✅ 每個格都會更新樣式
+            if (markedForDelete.Contains(kvp.Key)) continue;
+            UpdateSurrounding(kvp.Key);
         }
 
+        // 🧹 清理狀態
         previewTiles.Clear();
         pendingEraseTiles.Clear();
         markedForDelete.Clear();
         lastHoverPos = null;
     }
 
+    /// <summary>
+    /// 取得滑鼠目前所在的格子座標
+    /// </summary>
+    /// <returns>格子座標</returns>
     Vector2Int GetGridPosUnderMouse()
     {
         Ray ray = cam.ScreenPointToRay(Input.mousePosition);
@@ -216,6 +290,10 @@ public class RoadManager : MonoBehaviour
         return new Vector2Int(-1, -1);
     }
 
+    /// <summary>
+    /// 更新指定格子及其上下左右鄰居的道路圖示樣式
+    /// </summary>
+    /// <param name="center">中心格子座標</param>
     void UpdateSurrounding(Vector2Int center)
     {
         List<Vector2Int> area = new()
@@ -241,6 +319,14 @@ public class RoadManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 根據上下左右是否有道路的布林值，回傳對應的道路圖片
+    /// </summary>
+    /// <param name="u">上方是否有道路</param>
+    /// <param name="d">下方是否有道路</param>
+    /// <param name="l">左方是否有道路</param>
+    /// <param name="r">右方是否有道路</param>
+    /// <returns>對應的道路圖片</returns>
     Sprite GetCorrectSprite(bool u, bool d, bool l, bool r)
     {
         string key = $"{(u ? "1" : "0")}{(d ? "1" : "0")}{(l ? "1" : "0")}{(r ? "1" : "0")}";
@@ -261,13 +347,66 @@ public class RoadManager : MonoBehaviour
         };
     }
 
+    /// <summary>
+    /// 清除所有預覽道路物件，釋放資源並清空預覽字典，並更新周圍道路樣式
+    /// </summary>
     void ClearPreview()
     {
+        // 先刪除所有預覽格子，並更新周圍格子的樣式
         foreach (var kvp in previewTiles)
         {
             if (kvp.Value != null)
+            {
                 Destroy(kvp.Value.gameObject);
+                UpdateSurrounding(kvp.Key);
+            }
         }
         previewTiles.Clear();
+
+        // 再次確認所有已建成道路的樣式正確
+        foreach (var pos in builtRoads.Keys)
+        {
+            UpdateSurrounding(pos);
+        }
+    }
+
+    public void EnterBuildMode()
+    {
+        isPlacing = true;
+        dragStart = null;
+        lastHoverPos = null;
+        pendingEraseTiles.Clear();
+        markedForDelete.Clear();
+        ClearPreview();
+
+        UIMode.IsMouseDragAllowed = false;
+        UIMode.IsMouseEdgeScrollAllowed = true;
+    }
+
+    public void ExitBuildMode()
+    {
+        isPlacing = false;
+        dragStart = null;
+        lastHoverPos = null;
+
+        ProcessPendingErase(); // 先處理所有標記刪除的預覽與建成道路
+        pendingEraseTiles.Clear();
+        markedForDelete.Clear();
+        ClearPreview();
+
+        UIMode.IsMouseDragAllowed = true;
+        UIMode.IsMouseEdgeScrollAllowed = false;
+
+        StartCoroutine(DelayedResetCamera());
+    }
+
+    private System.Collections.IEnumerator DelayedResetCamera()
+    {
+        yield return null;
+        CameraController camCtrl = FindObjectOfType<CameraController>();
+        if (camCtrl != null)
+        {
+            camCtrl.ResetCameraPosition();
+        }
     }
 }

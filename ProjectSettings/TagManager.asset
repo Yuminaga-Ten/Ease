@@ -38,6 +38,15 @@ TagManager:
   - 
   - 
   m_SortingLayers:
+  - name: Tile
+    uniqueID: 1232410475
+    locked: 0
+  - name: Roads
+    uniqueID: 3417900165
+    locked: 0
+  - name: UI
+    uniqueID: 1361746117
+    locked: 0
   - name: Default
     uniqueID: 0
     locked: 0
