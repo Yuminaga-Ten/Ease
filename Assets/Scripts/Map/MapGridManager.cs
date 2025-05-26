@@ -38,6 +38,8 @@ public class MapGridManager : MonoBehaviour
 
     private HashSet<string> exploredRegions = new HashSet<string>(); // 記錄哪些區塊是已開拓的
 
+    private Dictionary<Vector2Int, string> occupiedTiles = new(); // 記錄格子被誰佔用的字典
+
     // 滑鼠懸停與點擊相關
     private Camera mainCamera;
     private Vector2Int? hoveredTile = null;    // 滑鼠當前懸停的格子座標
@@ -252,5 +254,36 @@ marker.name = "DebugMarker";
         char col = (char)('A' + rx);
         int row = (regionCount - 1) - ry;
         return $"{col}{row}";
+    }
+
+    public void MarkOccupied(Vector2Int pos, string buildingType)// 將格子標記為已佔用
+    {
+        occupiedTiles[pos] = buildingType;
+    }
+
+    public bool IsOccupied(Vector2Int pos)// 檢查格子是否已被佔用
+    {
+        return occupiedTiles.ContainsKey(pos);
+    }
+
+    public string GetBuildingType(Vector2Int pos)// 告訴我格子被什麼建築佔用
+    {
+        return occupiedTiles.TryGetValue(pos, out var type) ? type : null;
+    }
+
+    public void UnmarkOccupied(Vector2Int pos)// 將格子標記為未佔用
+    {
+        if (occupiedTiles.ContainsKey(pos))
+        {
+            occupiedTiles.Remove(pos);
+        }
+    }
+
+    /// <summary>
+    /// 取得目前所有被佔用的格子與其建築類型
+    /// </summary>
+    public Dictionary<Vector2Int, string> GetAllOccupiedTiles()
+    {
+        return new Dictionary<Vector2Int, string>(occupiedTiles);
     }
 }

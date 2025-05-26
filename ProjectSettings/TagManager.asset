@@ -3,7 +3,8 @@
 --- !u!78 &1
 TagManager:
   serializedVersion: 2
-  tags: []
+  tags:
+  - MainBuilding
   layers:
   - Default
   - TransparentFX
@@ -43,6 +44,9 @@ TagManager:
     locked: 0
   - name: Roads
     uniqueID: 3417900165
+    locked: 0
+  - name: Builds
+    uniqueID: 1629213535
     locked: 0
   - name: UI
     uniqueID: 1361746117

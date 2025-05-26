@@ -3,6 +3,12 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+public enum RoadBuildMode
+{
+    Build,
+    Delete
+}
+
 public class RoadManager : MonoBehaviour
 {
     [Header("道路預製物件與樣式")]
@@ -29,6 +35,16 @@ public class RoadManager : MonoBehaviour
     private Camera cam; // 主相機
     private MapGridManager grid; // 地圖格子管理器，用於座標轉換與判斷建造區域
 
+    private RoadBuildMode currentMode = RoadBuildMode.Build;
+
+    private bool isDraggingBuild = false;
+
+    private bool isDraggingDeletePreviewOnly = false;
+
+    private List<GameObject> gridPreviews = new();
+    private Sprite gridPreviewSprite;
+
+    private RoadActive roadActive;
 
     /// <summary>
     /// 載入所有道路圖片資源，並依名稱對應到陣列索引
@@ -76,10 +92,12 @@ public class RoadManager : MonoBehaviour
         cam = Camera.main;
         grid = FindObjectOfType<MapGridManager>();
         LoadAllRoadSprites();
+        gridPreviewSprite = Resources.Load<Sprite>("格子");
+        roadActive = FindObjectOfType<RoadActive>();
     }
 
     /// <summary>
-    /// 每幀更新，處理模式切換與建造輸入
+    /// 每幀更新，處理模式切換與建造輸入，只測試腳本時用
     /// </summary>
     void Update()
     {
@@ -116,7 +134,13 @@ public class RoadManager : MonoBehaviour
         {
             dragStart = GetGridPosUnderMouse();
             lastHoverPos = null;
-            isDeleteMode = DetermineDeleteMode(dragStart.Value);
+            isDeleteMode = (currentMode == RoadBuildMode.Delete);
+
+            if (currentMode == RoadBuildMode.Build && dragStart != null)
+            {
+                isDraggingBuild = !previewTiles.ContainsKey(dragStart.Value);
+                isDraggingDeletePreviewOnly = previewTiles.ContainsKey(dragStart.Value);
+            }
         }
 
         if (Input.GetMouseButton(0) && dragStart != null)
@@ -133,6 +157,8 @@ public class RoadManager : MonoBehaviour
         {
             dragStart = null;
             lastHoverPos = null;
+            isDraggingBuild = false;
+            isDraggingDeletePreviewOnly = false;
             ProcessPendingErase();
         }
 
@@ -144,6 +170,8 @@ public class RoadManager : MonoBehaviour
         }
     }
 
+    // 未使用的方法，保留作為潛在工具
+    /*
     /// <summary>
     /// 判斷該格是否處於刪除模式（已有預覽或建造道路）
     /// </summary>
@@ -153,45 +181,80 @@ public class RoadManager : MonoBehaviour
     {
         return previewTiles.ContainsKey(pos) || builtRoads.ContainsKey(pos);
     }
+    */
 
     /// <summary>
-    /// 根據目前模式，繪製預覽道路或標記刪除
+    /// 根據目前模式，繪製預覽格子提示（紅白），再處理道路預覽或刪除標記
     /// </summary>
     /// <param name="pos">格子座標</param>
     void DrawPreviewPoint(Vector2Int pos)
     {
+        // === 預覽格子提示：根據模式顯示紅白色 ===
+        // 無論能否建造都會顯示
+        if (gridPreviewSprite != null)
+        {
+            GameObject g = new GameObject("GridPreview");
+            g.transform.position = grid.GridToWorld(pos);
+            SpriteRenderer sr = g.AddComponent<SpriteRenderer>();
+            sr.sprite = gridPreviewSprite;
+            sr.sortingOrder = 99;
+            if (isDeleteMode)
+            {
+                // 刪除模式下：已建道路白色，否則紅色
+                sr.color = builtRoads.ContainsKey(pos) ? new Color(1f, 1f, 1f, 0.4f) : new Color(1f, 0f, 0f, 0.4f);
+            }
+            else
+            {
+                bool occupied = grid.IsOccupied(pos);
+                bool buildable = grid.IsRegionBuildable(grid.GetRegionName(pos.x, pos.y));
+                // 不可建造（紅色） / 可建造（白色）
+                sr.color = (!buildable || occupied) ? new Color(1f, 0f, 0f, 0.4f) : new Color(1f, 1f, 1f, 0.4f);
+            }
+            gridPreviews.Add(g);
+        }
+
+        // === 刪除模式：處理預覽或已建造道路的刪除標記 ===
         if (isDeleteMode)
         {
-            // 刪除模式：將預覽道路標記為刪除，或標記已建造道路刪除
             if (previewTiles.ContainsKey(pos))
             {
                 previewTiles[pos].SetColor(deletePreviewColor);
                 pendingEraseTiles.Add(pos);
                 return;
             }
-
             if (builtRoads.ContainsKey(pos) && !markedForDelete.Contains(pos))
             {
                 markedForDelete.Add(pos);
                 builtRoads[pos].SetColor(deleteFinalColor);
                 return;
             }
+            return;
         }
-        else
+
+        // === 建造模式：處理預覽道路生成 ===
+        if (previewTiles.ContainsKey(pos))
         {
-            // 建造模式：若該格尚未有道路且可建造，生成預覽道路
-            if (previewTiles.ContainsKey(pos) || builtRoads.ContainsKey(pos)) return;
-            if (!grid.IsRegionBuildable(grid.GetRegionName(pos.x, pos.y))) return;
-
-            Vector3 worldPos = grid.GridToWorld(pos);
-            GameObject go = Instantiate(roadTilePrefab, worldPos, Quaternion.identity, transform);
-            RoadTile rt = go.GetComponent<RoadTile>();  
-            rt.gridPos = pos;
-            rt.SetColor(previewColor);
-            previewTiles[pos] = rt;
-
-            UpdateSurrounding(pos); // 🔄 建造時立刻更新樣式
+            if (!isDraggingBuild)
+            {
+                previewTiles[pos].SetColor(deletePreviewColor);
+                pendingEraseTiles.Add(pos);
+            }
+            return;
         }
+        if (builtRoads.ContainsKey(pos)) return;
+        if (grid.IsOccupied(pos)) return;
+        if (!grid.IsRegionBuildable(grid.GetRegionName(pos.x, pos.y))) return;
+        if (!isDraggingBuild || isDraggingDeletePreviewOnly) return;
+
+        // ✅ 可建造：產生預覽道路
+        Vector3 worldPos = grid.GridToWorld(pos);
+        GameObject go = Instantiate(roadTilePrefab, worldPos, Quaternion.identity, transform);
+        RoadTile rt = go.GetComponent<RoadTile>();
+        rt.gridPos = pos;
+        rt.SetColor(previewColor);
+        previewTiles[pos] = rt;
+
+        UpdateSurrounding(pos); // 🔄 建造時立刻更新樣式
     }
 
     /// <summary>
@@ -205,6 +268,7 @@ public class RoadManager : MonoBehaviour
             {
                 Destroy(previewTiles[pos].gameObject);
                 previewTiles.Remove(pos);
+                if(grid != null){grid.UnmarkOccupied(pos);} // 解除標記
                 UpdateSurrounding(pos);
             }
         }
@@ -216,10 +280,23 @@ public class RoadManager : MonoBehaviour
             {
                 Destroy(builtRoads[pos].gameObject);
                 builtRoads.Remove(pos);
+                grid.UnmarkOccupied(pos); // 解除標記
                 UpdateSurrounding(pos);
             }
         }
         markedForDelete.Clear();
+
+        foreach (var go in gridPreviews)
+            Destroy(go);
+        gridPreviews.Clear();
+
+        // 新增：重新計算道路啟用狀態
+        if (roadActive != null)
+        {
+            Vector2Int origin = FindMainBuildingOrigin();
+            if (origin != Vector2Int.zero)
+                roadActive.RecalculateFromMainBuilding(origin, 5);
+        }
     }
 
     /// <summary>
@@ -258,6 +335,9 @@ public class RoadManager : MonoBehaviour
             RoadTile tile = kvp.Value;
             tile.SetColor(Color.white);
             builtRoads[pos] = tile;
+
+            // 新增佔用標記
+            grid.MarkOccupied(pos, "Road");
         }
 
         // 🔄 更新周圍圖示樣式
@@ -272,6 +352,19 @@ public class RoadManager : MonoBehaviour
         pendingEraseTiles.Clear();
         markedForDelete.Clear();
         lastHoverPos = null;
+
+        foreach (var go in gridPreviews)
+            Destroy(go);
+        gridPreviews.Clear();
+
+        if (roadActive != null)
+        {
+            Vector2Int origin = FindMainBuildingOrigin();
+            if (origin != Vector2Int.zero)
+                roadActive.RecalculateFromMainBuilding(origin, 5);
+        }
+
+        ExitBuildMode(); // ✅ 建造完成後自動離開建造模式
     }
 
     /// <summary>
@@ -370,8 +463,9 @@ public class RoadManager : MonoBehaviour
         }
     }
 
-    public void EnterBuildMode()
+    public void EnterBuildMode(RoadBuildMode mode)
     {
+        currentMode = mode;
         isPlacing = true;
         dragStart = null;
         lastHoverPos = null;
@@ -400,6 +494,19 @@ public class RoadManager : MonoBehaviour
         StartCoroutine(DelayedResetCamera());
     }
 
+    /// <summary>
+    /// 供外部（如UI按鈕）呼叫的確認建造方法，具保護避免重複執行
+    /// </summary>
+    public void ConfirmPreviewExternally()
+    {
+        if (!isPlacing) return;
+        if (isConfirming) return;
+
+        isConfirming = true;
+        ConfirmPreview();
+        isConfirming = false;
+    }
+
     private System.Collections.IEnumerator DelayedResetCamera()
     {
         yield return null;
@@ -408,5 +515,17 @@ public class RoadManager : MonoBehaviour
         {
             camCtrl.ResetCameraPosition();
         }
+    }
+
+    private Vector2Int FindMainBuildingOrigin()
+    {
+        foreach (var kvp in grid.GetAllOccupiedTiles())
+        {
+            if (grid.GetBuildingType(kvp.Key) == "MainBuilding")
+            {
+                return kvp.Key; // 回傳第一個找到的主建築格（假設從左下角建起）
+            }
+        }
+        return Vector2Int.zero;
     }
 }

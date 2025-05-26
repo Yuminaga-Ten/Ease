@@ -20,7 +20,7 @@ public class UIManager : MonoBehaviour
     // 更新資源數值面板
     public void UpdateResourceUI(int resource, int food, int people, int heart)
     {
-        resourcePanel.UpdateResources(resource, food, people, heart);
+        resourcePanel.UpdateAllResource(resource, food, people, heart);
     }
 
     // 顯示／隱藏建造選單

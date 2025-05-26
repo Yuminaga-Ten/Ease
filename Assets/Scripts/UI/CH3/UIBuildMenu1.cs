@@ -10,9 +10,14 @@ public class UIBuildMenu1 : MonoBehaviour
     public GameObject openButton;       // 開啟用按鈕
 
     [Header("滑動動畫設定")]
-    public Vector2 shownPos = new Vector2(-100f, -50f);   // 顯示位置
-    public Vector2 hiddenPos = new Vector2(300f, -50f);   // 隱藏位置
+    public Vector2 shownPos = new Vector2(-40f, 120f);   // 顯示位置
+    public Vector2 hiddenPos = new Vector2(80f, 120f);   // 隱藏位置
     public float slideSpeed = 10f;                        // 動畫速度
+
+    public UIBuildMenu2 mainBuildingMenu2;
+    public UIBuildMenu2 functionBuildingMenu2;
+    public UIBuildMenu2 manufactureBuildingMenu2;
+    public UIBuildMenu2 roadsBuildingMenu2;
 
     private bool isOpen = false;
 
@@ -56,6 +61,8 @@ public class UIBuildMenu1 : MonoBehaviour
     public void OnClickMainBuilding()
     {
         Debug.Log("主建築建造按鈕被點擊");
+        CloseAllSecondMenus();
+        mainBuildingMenu2.OpenPanel("主建築");
     }
 
     /// <summary>
@@ -64,7 +71,17 @@ public class UIBuildMenu1 : MonoBehaviour
     public void OnClickRoad()
     {
         Debug.Log("道路建造按鈕被點擊");
-        FindObjectOfType<RoadManager>().EnterBuildMode();
+        CloseAllSecondMenus();
+        roadsBuildingMenu2.OpenPanel("道路");
+    }
+
+    //用來關閉所有其他的二層選單
+    private void CloseAllSecondMenus()
+    {
+        if (mainBuildingMenu2 != null) mainBuildingMenu2.ClosePanel();
+        if (functionBuildingMenu2 != null) functionBuildingMenu2.ClosePanel();
+        if (manufactureBuildingMenu2 != null) manufactureBuildingMenu2.ClosePanel();
+        if (roadsBuildingMenu2 != null) roadsBuildingMenu2.ClosePanel();
     }
 
     /// <summary>
@@ -73,7 +90,12 @@ public class UIBuildMenu1 : MonoBehaviour
     public void CloseAllAndExitBuildMode()
     {
         SetPanelOpen(false);
-        FindObjectOfType<RoadManager>().ExitBuildMode();
+        if (mainBuildingMenu2 != null) mainBuildingMenu2.ClosePanel();
+        if (functionBuildingMenu2 != null) functionBuildingMenu2.ClosePanel();
+        if (manufactureBuildingMenu2 != null) manufactureBuildingMenu2.ClosePanel();
+        if (roadsBuildingMenu2 != null) roadsBuildingMenu2.ClosePanel();
+        FindObjectOfType<RoadManager>().ExitBuildMode(); //第二次關閉（保險用）
+        FindObjectOfType<MainBuildingManager>().ExitAllModes(); //第二次關閉（保險用）
         Debug.Log("退出建造模式");
     }
 }
