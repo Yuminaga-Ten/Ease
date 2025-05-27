@@ -52,43 +52,10 @@ public class MainBuildingManager : MonoBehaviour
 
     void Update()
     {
-        // 玩家按下 Escape 鍵 → 取消建造或移動模式
+        // 玩家按下 Escape 鍵 → 統一呼叫 ExitAllModes()
         if (Input.GetKeyDown(KeyCode.Escape))
         {
-            if (isPlacing)
-            {
-                isPlacing = false;
-                if (previewInstance != null)
-                {
-                    Destroy(previewInstance);
-                    previewInstance = null;
-                }
-                foreach (var tile in previewTiles)
-                    tile.SetActive(false);
-                Debug.Log("取消主建築建造模式");
-            }
-            else if (isMoving)
-            {
-                isMoving = false;
-
-                // 🔁 清除當前預覽位置的格子標記（可能尚未確認建造但移動過）
-                for (int x = 0; x < size; x++)
-                {
-                    for (int y = 0; y < size; y++)
-                    {
-                        mapGrid.UnmarkOccupied(previewOrigin + new Vector2Int(x, y));
-                    }
-                }
-
-                // ✅ 恢復建築位置與標記為原始起點
-                previewInstance.transform.position = originalMovePosition;
-                MarkOccupied(originalMoveOrigin);
-                previewOrigin = originalMoveOrigin;
-
-                foreach (var tile in previewTiles)
-                    tile.SetActive(false);
-                Debug.Log("取消主建築移動模式");
-            }
+            ExitAllModes();
         }
 
         // 若未處於建造模式或已建造完成，則不執行更新
@@ -106,16 +73,7 @@ public class MainBuildingManager : MonoBehaviour
 
                 // 預覽格更新
                 bool canMove = CanPlaceAt(previewOrigin);
-                int index = 0;
-                foreach (var tile in previewTiles)
-                {
-                    tile.SetActive(true);
-                    Vector2Int pos = previewOrigin + new Vector2Int(index % size, index / size);
-                    tile.transform.position = mapGrid.GridToWorld(pos);
-                    SpriteRenderer sr = tile.GetComponent<SpriteRenderer>();
-                    sr.color = canMove ? new Color(0f, 1f, 0f, 0.4f) : new Color(1f, 0f, 0f, 0.4f);
-                    index++;
-                }
+                UpdatePreviewTiles(previewOrigin, canMove);
 
                 if (Input.GetMouseButtonDown(0) && canMove)
                 {
@@ -146,19 +104,7 @@ public class MainBuildingManager : MonoBehaviour
 
         // 預覽格子框線顯示與顏色
         bool canBuild = CanPlaceAt(previewOrigin);
-        int index2 = 0;
-        for (int x = 0; x < size; x++)
-        {
-            for (int y = 0; y < size; y++)
-            {
-                Vector2Int pos = previewOrigin + new Vector2Int(x, y);
-                GameObject tile = previewTiles[index2++];
-                tile.SetActive(true);
-                tile.transform.position = mapGrid.GridToWorld(pos);
-                SpriteRenderer sr = tile.GetComponent<SpriteRenderer>();
-                sr.color = canBuild ? new Color(0f, 1f, 0f, 0.4f) : new Color(1f, 0f, 0f, 0.4f);
-            }
-        }
+        UpdatePreviewTiles(previewOrigin, canBuild);
 
         // 當玩家按下滑鼠左鍵，且該位置可放置建築，則確認建造
         if (Input.GetMouseButtonDown(0) && CanPlaceAt(previewOrigin))
@@ -167,16 +113,35 @@ public class MainBuildingManager : MonoBehaviour
         }
     }
 
+    void UpdatePreviewTiles(Vector2Int origin, bool canPlace)
+    {
+        int index = 0;
+        for (int x = 0; x < size; x++)
+        {
+            for (int y = 0; y < size; y++)
+            {
+                Vector2Int pos = origin + new Vector2Int(x, y);
+                GameObject tile = previewTiles[index++];
+                tile.SetActive(true);
+                tile.transform.position = mapGrid.GridToWorld(pos);
+                SpriteRenderer sr = tile.GetComponent<SpriteRenderer>();
+                sr.color = canPlace ? new Color(0f, 1f, 0f, 0.4f) : new Color(1f, 0f, 0f, 0.4f);
+            }
+        }
+    }
+
     // 進入建造模式，允許玩家放置主建築
     public void EnterBuildMode()
     {
         if (hasBuilt) return;  // 若已建造完成，則不允許再次進入建造模式
         isPlacing = true;
+        UIMode.IsMouseEdgeScrollAllowed = true;
+        UIMode.IsMouseDragAllowed = false;
     }
 
     public void EnterMoveMode()
     {
-        if (!hasBuilt)
+        if (!hasBuilt || isMoving)
             return;
 
         if (previewInstance == null)
@@ -202,6 +167,8 @@ public class MainBuildingManager : MonoBehaviour
             originalMovePosition = previewInstance.transform.position;
             isMoving = true;
         }
+        UIMode.IsMouseEdgeScrollAllowed = true;
+        UIMode.IsMouseDragAllowed = false;
     }
 
     void ConfirmMove(Vector2Int origin)
@@ -328,6 +295,8 @@ public class MainBuildingManager : MonoBehaviour
     // 手動關閉建造與移動模式（外部可調用）
     public void ExitAllModes()
     {
+        bool didExit = false;
+
         if (isPlacing)
         {
             isPlacing = false;
@@ -339,6 +308,7 @@ public class MainBuildingManager : MonoBehaviour
             foreach (var tile in previewTiles)
                 tile.SetActive(false);
             Debug.Log("主建築建造模式已手動關閉");
+            didExit = true;
         }
         else if (isMoving)
         {
@@ -363,6 +333,19 @@ public class MainBuildingManager : MonoBehaviour
                 roadActive.RecalculateFromMainBuilding(previewOrigin, size);
 
             Debug.Log("主建築移動模式已手動關閉");
+            didExit = true;
+        }
+
+        if (didExit)
+        {
+            UIMode.IsMouseEdgeScrollAllowed = false;
+            UIMode.IsMouseDragAllowed = true;
+
+            CameraController camCtrl = FindObjectOfType<CameraController>();
+            if (camCtrl != null)
+            {
+                camCtrl.ResetCameraPosition();
+            }
         }
     }
 }

@@ -479,6 +479,7 @@ public class RoadManager : MonoBehaviour
 
     public void ExitBuildMode()
     {
+        if (!isPlacing) return;
         isPlacing = false;
         dragStart = null;
         lastHoverPos = null;
@@ -490,7 +491,7 @@ public class RoadManager : MonoBehaviour
 
         UIMode.IsMouseDragAllowed = true;
         UIMode.IsMouseEdgeScrollAllowed = false;
-
+        
         StartCoroutine(DelayedResetCamera());
     }
 

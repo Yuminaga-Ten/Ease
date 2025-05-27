@@ -815,9 +815,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   FoodText: {fileID: 2022274843}
+  food: 0
   ResourceText: {fileID: 786828231}
+  resource: 0
   PeopleText: {fileID: 10012150}
+  people: 100
   HeartTxet: {fileID: 620973615}
+  heart: 50
   PeopleLabel: {fileID: 5539649096782954341}
   PeopleSlider: {fileID: 191211275}
 --- !u!1 &1092052900
@@ -1206,6 +1210,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 303712937}
     m_Modifications:
+    - target: {fileID: 808845077343419002, guid: e0f5411e17e3c40bc847cc489c308a8b, type: 3}
+      propertyPath: m_Navigation.m_Mode
+      value: -1
+      objectReference: {fileID: 0}
     - target: {fileID: 808845077343419002, guid: e0f5411e17e3c40bc847cc489c308a8b, type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.size
       value: 1

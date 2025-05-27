@@ -90,10 +90,7 @@ public class UIBuildMenu1 : MonoBehaviour
     public void CloseAllAndExitBuildMode()
     {
         SetPanelOpen(false);
-        if (mainBuildingMenu2 != null) mainBuildingMenu2.ClosePanel();
-        if (functionBuildingMenu2 != null) functionBuildingMenu2.ClosePanel();
-        if (manufactureBuildingMenu2 != null) manufactureBuildingMenu2.ClosePanel();
-        if (roadsBuildingMenu2 != null) roadsBuildingMenu2.ClosePanel();
+        CloseAllSecondMenus();
         FindObjectOfType<RoadManager>().ExitBuildMode(); //第二次關閉（保險用）
         FindObjectOfType<MainBuildingManager>().ExitAllModes(); //第二次關閉（保險用）
         Debug.Log("退出建造模式");
